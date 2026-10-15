@@ -13,6 +13,8 @@ param(
 
     [string[]]$PreferredLocation = @(),
 
+    [bool]$DeployModelDeployments = $false,
+
     [string[]]$AllowedEntraUserIds = @()
 )
 
@@ -79,6 +81,7 @@ Write-Host "DeploymentType: $DeploymentType" -ForegroundColor Yellow
 Write-Host "Subscription ID: $SubscriptionId" -ForegroundColor Yellow
 Write-Host "Location: $effectiveLocation" -ForegroundColor Yellow
 Write-Host "ResourceGroupName: $ResourceGroupName" -ForegroundColor Yellow
+Write-Host "DeployModelDeployments: $DeployModelDeployments" -ForegroundColor Yellow
 Write-Host ""
 
 # Ensure we are in the correct subscription context.
@@ -144,46 +147,83 @@ if (-not (Test-Path $templateFile)) {
 # Deploy resources.
 Write-Host "Deploying infrastructure resources..." -ForegroundColor Yellow
 $deploymentName = [System.IO.Path]::GetFileNameWithoutExtension($templateFile)
+$deploymentParameters = @{
+    Name = $deploymentName
+    ResourceGroupName = $effectiveResourceGroup
+    TemplateFile = $templateFile
+    location = $effectiveLocation
+    deployModelDeployments = $DeployModelDeployments
+    allowedEntraUserIds = $effectiveAllowedEntraUserIds
+    Verbose = $true
+    ErrorAction = 'Stop'
+}
+
 try {
-    $deploymentParameters = @{
-        Name = $deploymentName
-        ResourceGroupName = $effectiveResourceGroup
-        TemplateFile = $templateFile
-        location = $effectiveLocation
-        deployModelDeployments = $true
-        allowedEntraUserIds = $effectiveAllowedEntraUserIds
-        Verbose = $true
-        ErrorAction = 'Stop'
-    }
-
     $deployment = New-AzResourceGroupDeployment @deploymentParameters
-
     Write-Host "Deployment succeeded." -ForegroundColor Green
 }
 catch {
     $deploymentError = $_
-    Write-Host "[ERROR] Deployment failed: $deploymentError" -ForegroundColor Red
+    $isModelDeploymentFailure = $DeployModelDeployments -and ($deploymentError.ToString() -match 'deployments|model|quota|not available|validation procedure|cognitive')
 
-    try {
-        $failedOperations = @(
-            Get-AzResourceGroupDeploymentOperation `
-                -ResourceGroupName $effectiveResourceGroup `
-                -DeploymentName $deploymentName `
-                -ErrorAction Stop |
-            Where-Object { $_.ProvisioningState -eq 'Failed' }
-        )
+    if ($isModelDeploymentFailure) {
+        Write-Host "[WARN] The subscription/region rejected the model deployment resources. Retrying the infrastructure deployment without model deployments." -ForegroundColor Yellow
+        Write-Host "This preserves the Foundry account, Search service, and storage resources while avoiding the unsupported quota or region validation issue." -ForegroundColor Yellow
 
-        foreach ($failedOperation in $failedOperations) {
-            $target = $failedOperation.TargetResource
-            Write-Host "[ERROR] Failed resource: $($target.ResourceType)/$($target.ResourceName)" -ForegroundColor Red
-            Write-Host ($failedOperation.StatusMessage | ConvertTo-Json -Depth 20) -ForegroundColor Red
+        $deploymentParameters['deployModelDeployments'] = $false
+        try {
+            $deployment = New-AzResourceGroupDeployment @deploymentParameters
+            Write-Host "Deployment succeeded without model deployments. You can deploy the required models manually later if the subscription supports them." -ForegroundColor Green
+        }
+        catch {
+            $deploymentError = $_
+            Write-Host "[ERROR] Deployment failed even without model deployments: $deploymentError" -ForegroundColor Red
+            try {
+                $failedOperations = @(
+                    Get-AzResourceGroupDeploymentOperation `
+                        -ResourceGroupName $effectiveResourceGroup `
+                        -DeploymentName $deploymentName `
+                        -ErrorAction Stop |
+                    Where-Object { $_.ProvisioningState -eq 'Failed' }
+                )
+
+                foreach ($failedOperation in $failedOperations) {
+                    $target = $failedOperation.TargetResource
+                    Write-Host "[ERROR] Failed resource: $($target.ResourceType)/$($target.ResourceName)" -ForegroundColor Red
+                    Write-Host ($failedOperation.StatusMessage | ConvertTo-Json -Depth 20) -ForegroundColor Red
+                }
+            }
+            catch {
+                Write-Host "[WARN] Could not retrieve failed deployment operations: $_" -ForegroundColor Yellow
+            }
+
+            exit 1
         }
     }
-    catch {
-        Write-Host "[WARN] Could not retrieve failed deployment operations: $_" -ForegroundColor Yellow
-    }
+    else {
+        Write-Host "[ERROR] Deployment failed: $deploymentError" -ForegroundColor Red
 
-    exit 1
+        try {
+            $failedOperations = @(
+                Get-AzResourceGroupDeploymentOperation `
+                    -ResourceGroupName $effectiveResourceGroup `
+                    -DeploymentName $deploymentName `
+                    -ErrorAction Stop |
+                Where-Object { $_.ProvisioningState -eq 'Failed' }
+            )
+
+            foreach ($failedOperation in $failedOperations) {
+                $target = $failedOperation.TargetResource
+                Write-Host "[ERROR] Failed resource: $($target.ResourceType)/$($target.ResourceName)" -ForegroundColor Red
+                Write-Host ($failedOperation.StatusMessage | ConvertTo-Json -Depth 20) -ForegroundColor Red
+            }
+        }
+        catch {
+            Write-Host "[WARN] Could not retrieve failed deployment operations: $_" -ForegroundColor Yellow
+        }
+
+        exit 1
+    }
 }
 
 # Confirm every participant received the Foundry data-plane role required by

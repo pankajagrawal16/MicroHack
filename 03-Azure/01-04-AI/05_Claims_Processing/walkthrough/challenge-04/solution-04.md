@@ -1,11 +1,14 @@
 ---
-title: "Solution 04: Orchestrate the Two-Agent Claims Workflow"
+title: "Solution 04 (Manual Alternative): Orchestrate the Two-Agent Claims Workflow"
 description: "Solution walkthrough for running the two-agent sequential claims workflow"
 ---
 
 [Home](../../README.md) | [Challenge 04](../../challenges/challenge-04.md) | [Previous solution](../challenge-03/solution-03.md) | [Next solution](../challenge-05/solution-05.md)
 
 ## Outcome
+
+For the default workshop path, follow the [Agent Framework solution](./solution-04-agent-framework.md).
+This page preserves the manual sequential alternative.
 
 This solution runs the intake and intelligence agents in sequence and enters human
 review only when the decision is escalated or its confidence is below the configured
@@ -19,7 +22,9 @@ threshold.
 
 ## Run the solution
 
-From the repository root, run the covered comprehensive policy case:
+From the workshop folder,
+[`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](../../), run the covered
+comprehensive policy case:
 
 ```bash
 cd docs

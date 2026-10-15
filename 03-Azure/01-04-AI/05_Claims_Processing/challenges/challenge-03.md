@@ -65,7 +65,8 @@ single orchestrated flow:
 ## Prerequisites
 
 * Complete [Challenge 2](./challenge-02.md).
-* Keep the repository-root `.env` configuration from the participant setup.
+* Keep the `.env` configuration from participant setup in the workshop folder,
+  [`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](../).
 * Confirm the MicroHack platform or your event coach supplied access to the Foundry
   project and the Azure Storage account.
 
@@ -86,6 +87,12 @@ python create_knowledge_base.py --policies
 Foundry IQ creates and runs the ingestion resources asynchronously. The five Markdown
 documents already uploaded to the `policies` container become retrievable through the
 knowledge base without application code downloading the blobs.
+
+The helper configures this knowledge base with **Minimal** retrieval reasoning and
+**Extractive data** output. This works without a separate model deployment on the
+knowledge base. The Claims Intelligence Agent still uses its Foundry model to interpret
+the extracted policy fields and reason about claim coverage; the knowledge base handles
+document retrieval, not adjudication.
 
 Expected result:
 
@@ -126,6 +133,15 @@ Verify the crash-statements connection with a known indexed statement:
 ```bash
 python claims-intelligence-agent.py --verify-crash-statement crash1_front
 ```
+
+The Foundry IQ MCP endpoint uses the Search API version from
+`FOUNDRY_IQ_MCP_API_VERSION`; the default for this lab is `2026-08-01-preview`.
+If setup or verification fails with an unsupported `api-version` error, confirm that
+the Search service supports that version. Only override the variable with a version
+supported by your Search service. The deployment's two Foundry project connection
+targets also use the default version; if you override it, update both connection
+targets to the same endpoint version before rerunning `--setup-agent`. This keeps the
+MCP tool URLs and their project connections aligned.
 
 At this point, your project contains the two Foundry agents used in Challenge 4:
 `claims-intake-agent` from Challenge 2 and `claims-intelligence-agent` from this
@@ -180,13 +196,20 @@ Optional: override the policy number to test the approval path:
 python claims-intelligence-agent.py ../data/claims/crash1/derived/statements/crash1_front.intake.json --policy-number COMP-AUTO-001
 ```
 
-Optional: override the claim amount to test the escalation path:
+Optional: try a high claim amount with the liability-only policy:
 
 ```bash
 python claims-intelligence-agent.py ../data/claims/crash1/derived/statements/crash1_front.intake.json --policy-number LIAB-AUTO-001 --claim-amount 95000
 ```
 
-When the adjudicator returns `"requires_escalation": true`, confirm that `state.errors` contains an `ESCALATION_REQUIRED` entry with severity `WARN`.
+This input does **not** deterministically trigger escalation. A high amount by itself
+does not cross a fixed escalation threshold; escalation depends on the adjudicator's
+response. Inspect `status`, `coverage_decision.requires_escalation`, and
+`coverage_decision.escalation_reason` in the printed JSON. When
+`requires_escalation` is `true`, the output also includes an `ESCALATION_REQUIRED`
+entry with severity `WARN` in `errors`. When it is `false`, a `DENIED` result with
+no escalation warning can be correct for an own-vehicle collision excluded by the
+liability-only policy.
 
 ## Expected output
 
@@ -201,6 +224,7 @@ When the adjudicator returns `"requires_escalation": true`, confirm that `state.
    - Matched exclusions
    - Risk flags and confidence score
    - `consistency_score`: a 1-100 rating of how well the crash details line up with what the policy should cover, and therefore whether the claim should be approved
+   - `requires_escalation` and `escalation_reason`: the adjudicator's explicit manual-review signal and explanation
 6. Escalates to `ESCALATED` status and records a `WARN`-severity error when the adjudicator signals manual review is needed.
 7. Appends a complete audit trail entry for every significant action, including agent name, action type, outcome, and structured metadata (including the consistency score).
 
@@ -218,5 +242,7 @@ When the adjudicator returns `"requires_escalation": true`, confirm that `state.
 
 ## Next step
 
-Continue with [Challenge 4](./challenge-04.md) to orchestrate the two Foundry agents
-from Challenges 2 and 3 as one sequential workflow.
+Continue with [Challenge 4: Agent Framework workflow (default path)](./challenge-04-agent-framework.md)
+to orchestrate the two Foundry agents from Challenges 2 and 3 as a graph with conditional
+human review and optional hosted-agent deployment.
+The [manual sequential workflow](./challenge-04.md) remains available as an alternative.

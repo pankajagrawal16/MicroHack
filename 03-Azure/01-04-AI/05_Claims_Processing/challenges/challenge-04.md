@@ -1,6 +1,10 @@
-# Challenge 4 - Orchestrate the Two-Agent Claims Workflow and Human In the Loop Configuration
+# Challenge 4 (Manual Sequential Alternative) - Orchestrate the Two-Agent Claims Workflow and Human In the Loop Configuration
 
 [Home](../README.md)
+
+> [!IMPORTANT]
+> The default continuation from Challenge 3 is the [Agent Framework workflow](./challenge-04-agent-framework.md).
+> This page preserves the manual sequential workflow as an alternative; complete only one path.
 
 **Expected Duration:** 45 minutes
 
@@ -36,6 +40,12 @@ assurance, compliance review, dispute handling, and future model evaluation.
 In short: **accident statement image -> intake agent -> structured claim -> policy
 retrieval and coverage adjudication by the intelligence agent -> conditional human
 review -> final decision**.
+
+> [!TIP]
+> **Two ways to do this challenge.** This page builds the workflow as a Python script.
+> The [Agent Framework workflow](./challenge-04-agent-framework.md) builds the same workflow with
+> Microsoft Agent Framework's workflow support, takes the same inputs, and can be deployed as
+> a hosted Foundry agent. Do either one, then continue to Challenge 5.
 
 ```mermaid
 flowchart TD
@@ -111,7 +121,8 @@ If the decision is escalated or its confidence is below the configured threshold
 workflow changes its status to `PENDING_HUMAN_REVIEW` and pauses. It keeps waiting until
 you enter `approve`, `escalate`, or `deny`; invalid responses prompt again instead of
 allowing the workflow to continue. The default confidence threshold is `0.90`. Set
-`HUMAN_REVIEW_CONFIDENCE_THRESHOLD` in the repository-root `.env` to change it.
+`HUMAN_REVIEW_CONFIDENCE_THRESHOLD` in the `.env` in the workshop folder,
+[`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](../), to change it.
 
 ### Task 3: Complete human-in-the-loop review when requested
 
@@ -213,4 +224,7 @@ intelligence agent retrieves and structures that policy before making its decisi
 
 ## Next step
 
-Continue with [Challenge 5](./challenge-05.md) to harden this pipeline against prompt injection and data exfiltration using FIDES.
+Continue with [Challenge 5](./challenge-05.md) to observe and evaluate the workflow, then
+[Challenge 6](./challenge-06.md) to add FIDES protections to downstream actions.
+
+For the default framework workflow, see the [Agent Framework instructions](./challenge-04-agent-framework.md).

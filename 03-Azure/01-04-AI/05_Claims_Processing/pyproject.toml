@@ -16,6 +16,11 @@ dependencies = [
   "python-dotenv==1.1.1",
 ]
 
+[project.optional-dependencies]
+tracing = [
+  "azure-monitor-opentelemetry-exporter==1.0.0b58",
+]
+
 [dependency-groups]
 dev = [
   "ipykernel",

@@ -23,9 +23,9 @@
     },
     "deployModelDeployments": {
       "type": "bool",
-      "defaultValue": true,
+      "defaultValue": false,
       "metadata": {
-        "description": "Whether to create AI model deployments inside the AI Foundry account."
+        "description": "Whether to create AI model deployments inside the AI Foundry account. This is disabled by default because some subscriptions and regions do not support the required models or quotas during initial validation."
       }
     },
     "blobContainerName": {
@@ -323,7 +323,7 @@
       "name": "[format('{0}/{1}/{0}-policies-kb', variables('aiFoundryName'), variables('aiProjectName'))]",
       "properties": {
         "category": "RemoteTool",
-        "target": "[format('https://{0}.search.windows.net/knowledgebases/policies-kb/mcp?api-version=2026-04-01', variables('searchServiceName'))]",
+        "target": "[format('https://{0}.search.windows.net/knowledgebases/policies-kb/mcp?api-version=2026-08-01-preview', variables('searchServiceName'))]",
         "authType": "ProjectManagedIdentity",
         "audience": "https://search.azure.com/",
         "isSharedToAll": true,
@@ -344,7 +344,7 @@
       "name": "[format('{0}/{1}/{0}-crash-statements-kb', variables('aiFoundryName'), variables('aiProjectName'))]",
       "properties": {
         "category": "RemoteTool",
-        "target": "[format('https://{0}.search.windows.net/knowledgebases/crash-statements-kb/mcp?api-version=2026-04-01', variables('searchServiceName'))]",
+        "target": "[format('https://{0}.search.windows.net/knowledgebases/crash-statements-kb/mcp?api-version=2026-08-01-preview', variables('searchServiceName'))]",
         "authType": "ProjectManagedIdentity",
         "audience": "https://search.azure.com/",
         "isSharedToAll": true,

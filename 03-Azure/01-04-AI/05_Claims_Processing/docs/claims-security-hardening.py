@@ -77,7 +77,7 @@ def _require_agent_framework() -> None:
         from agent_framework.security import SecureAgentConfig  # noqa: F401
     except (ImportError, PackageNotFoundError) as exc:
         raise RuntimeError(
-            "Challenge 5 requires agent-framework-core==1.13.0 and "
+            "Challenge 6 requires agent-framework-core==1.13.0 and "
             "agent-framework-foundry==1.10.4. Run: python -m pip install "
             "--upgrade \"agent-framework-core==1.13.0\" "
             "\"agent-framework-foundry==1.10.4\" azure-identity"
@@ -238,6 +238,11 @@ def main() -> None:
         help="Enable auto_hide_untrusted so the main model never sees raw claimant "
         "text directly — only a quarantined summary.",
     )
+    parser.add_argument(
+        "--workflow", choices=["sequential", "framework"], default="sequential",
+        help="Challenge 4 workflow to run first: the sequential script or the "
+        "Agent Framework workflow (default: sequential).",
+    )
     args = parser.parse_args()
 
     if not FOUNDRY_PROJECT_ENDPOINT:
@@ -252,10 +257,15 @@ def main() -> None:
 
     image_path = Path(args.image_path).expanduser().resolve()
     workflow_module = _load_challenge_module(
-        "claims_sequential_workflow", "claims-sequential-workflow.py"
+        "claims_workflow",
+        "claims-framework-workflow.py" if args.workflow == "framework" else "claims-sequential-workflow.py",
     )
 
-    print("\nRunning Challenge 4 two-agent workflow...")
+    print(
+        "\nRunning Challenge 4 two-agent workflow..."
+        if args.workflow == "sequential"
+        else "\nRunning Challenge 4 two-agent workflow (Agent Framework)..."
+    )
     decision = workflow_module.run_claims_pipeline(
         image_path=image_path,
         claim_id=args.claim_id,
@@ -281,7 +291,7 @@ def main() -> None:
     print(json.dumps(output["audit_log"], indent=2, default=str))
 
     print("\n" + "=" * 60)
-    print("CHALLENGE 5 COMPLETE")
+    print("CHALLENGE 6 COMPLETE")
     print("=" * 60)
     print("  Challenge 4 two-agent decision    complete")
     print("  FIDES-secured downstream actions  complete")

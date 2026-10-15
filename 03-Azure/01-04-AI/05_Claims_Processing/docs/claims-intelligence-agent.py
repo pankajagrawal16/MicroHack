@@ -50,6 +50,7 @@ POLICIES_KNOWLEDGE_BASE_NAME = os.environ.get(
 CRASH_STATEMENTS_KNOWLEDGE_BASE_NAME = os.environ.get(
     "FOUNDRY_IQ_KNOWLEDGE_BASE_NAME", "crash-statements-kb"
 )
+MCP_API_VERSION = os.environ.get("FOUNDRY_IQ_MCP_API_VERSION", "2026-08-01-preview")
 REQUIRED_MCP_TOOL_LABELS = {
     "policies-knowledge-base",
     "crash-statements-knowledge-base",
@@ -202,7 +203,7 @@ the input. Do not call either knowledge-base tool in this mode. Your role is to:
             server_label="policies-knowledge-base",
             server_url=(
                 f"{search_endpoint}/knowledgebases/{POLICIES_KNOWLEDGE_BASE_NAME}"
-                "/mcp?api-version=2026-04-01"
+                f"/mcp?api-version={MCP_API_VERSION}"
             ),
             require_approval="never",
             allowed_tools=["knowledge_base_retrieve"],
@@ -225,7 +226,7 @@ the input. Do not call either knowledge-base tool in this mode. Your role is to:
             server_label="crash-statements-knowledge-base",
             server_url=(
                 f"{search_endpoint}/knowledgebases/{CRASH_STATEMENTS_KNOWLEDGE_BASE_NAME}"
-                "/mcp?api-version=2026-04-01"
+                f"/mcp?api-version={MCP_API_VERSION}"
             ),
             require_approval="never",
             allowed_tools=["knowledge_base_retrieve"],
@@ -237,6 +238,10 @@ the input. Do not call either knowledge-base tool in this mode. Your role is to:
 
     def _ensure_claims_intelligence_agent(self) -> None:
         """Register the unified intelligence agent with its policy knowledge tool."""
+        expected_tools = [
+            self._build_policy_knowledge_tool(),
+            self._build_crash_statements_knowledge_tool(),
+        ]
         try:
             self.client.agents.get(CLAIMS_INTELLIGENCE_AGENT_NAME)
             versions = list(self.client.agents.list_versions(CLAIMS_INTELLIGENCE_AGENT_NAME))
@@ -247,9 +252,19 @@ the input. Do not call either knowledge-base tool in this mode. Your role is to:
                 for tool in latest_tools
                 if getattr(tool, "type", None) == "mcp"
             }
+            latest_tool_connections = {
+                tool.server_label: (tool.server_url, tool.project_connection_id)
+                for tool in latest_tools
+                if getattr(tool, "type", None) == "mcp"
+            }
             if (
                 latest_version.definition.model == self.model
                 and REQUIRED_MCP_TOOL_LABELS.issubset(latest_tool_labels)
+                and all(
+                    latest_tool_connections.get(tool.server_label)
+                    == (tool.server_url, tool.project_connection_id)
+                    for tool in expected_tools
+                )
             ):
                 return
         except ResourceNotFoundError:
@@ -258,10 +273,7 @@ the input. Do not call either knowledge-base tool in this mode. Your role is to:
         definition = PromptAgentDefinition(
             model=self.model,
             instructions=self.get_intelligence_instructions(),
-            tools=[
-                self._build_policy_knowledge_tool(),
-                self._build_crash_statements_knowledge_tool(),
-            ],
+            tools=expected_tools,
         )
         self.client.agents.create_version(
             agent_name=CLAIMS_INTELLIGENCE_AGENT_NAME,
@@ -387,7 +399,9 @@ the input. Do not call either knowledge-base tool in this mode. Your role is to:
                 reasoning=decision_json.get("reasoning", ""),
                 risk_flags=decision_json.get("risk_flags", []),
                 confidence_score=decision_json.get("confidence_score", 0.85),
-                consistency_score=int(decision_json.get("consistency_score", 0))
+                consistency_score=int(decision_json.get("consistency_score", 0)),
+                requires_escalation=decision_json.get("requires_escalation", False),
+                escalation_reason=decision_json.get("escalation_reason"),
             )
             
             # Check for escalation flags

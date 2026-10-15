@@ -18,7 +18,10 @@ Framework**, and **FIDES**.
 
 During this microhack, you will build a reusable Python workflow that progresses from
 document intake to policy-grounded adjudication, conditional human review, deterministic
-security enforcement, and protected downstream actions.
+security enforcement, and protected downstream actions. You will then explore production
+readiness by tracing the agents, evaluating decisions, and adding guardrails. These exercises
+demonstrate controls, not a production certification; preview features, operational reliability,
+privacy, and access policies still need validation for your workload.
 
 ---
 
@@ -35,6 +38,8 @@ An accident statement enters the claims system. The ClaimSight workflow must:
 	 routing uncertain or escalated decisions to human review.
 4. Use the **Claims Security Action Agent** and FIDES to prevent untrusted claimant
 	 content from authorizing payouts or exposing private policyholder data.
+5. Trace each claim, evaluate the decisions with rubric and continuous evaluations, and
+	 measure a guardrail so quality and safety stay visible after release.
 
 The following diagram shows the claim journey and the responsibilities introduced by
 the challenges:
@@ -55,7 +60,16 @@ flowchart LR
 		POLICIES[Policy documents in Blob Storage] --> POLICYIQ[Foundry IQ policy knowledge base]
 		POLICYIQ --> DECISION
 		FIDES[FIDES policy enforcement] --> SECURE
+
+		OBSERVE[Traces, evaluations, guardrails] -.-> INTAKE
+		OBSERVE -.-> DECISION
+		OBSERVE -.-> SECURE
 ```
+
+Challenge 5 introduces observability with hands-on evaluation and guardrail tests focused
+on the intelligence agent. Challenge 6 then adds deterministic FIDES controls around
+downstream actions. These exercises do not automatically instrument all agents or provide
+one end-to-end workflow trace.
 
 ---
 
@@ -75,7 +89,7 @@ flowchart TB
 				INTAKE[claims-intake-agent]
 				INTELLIGENCE[claims-intelligence-agent]
 				SECURITY[claims-security-action-agent]
-				ORCH[Sequential claims workflow]
+				ORCH[Claims workflow: script or Agent Framework graph]
 				INTAKE --> INTELLIGENCE --> ORCH
 				ORCH --> SECURITY
 		end
@@ -95,6 +109,7 @@ flowchart TB
 		SECURITY --> PAYOUT[Guarded payout tool]
 		SECURITY --> NOTIFY[Guarded notification tool]
 		FIDES[FIDES integrity and confidentiality policies] --> SECURITY
+		OBSERVE[Application Insights traces, evaluations, guardrails] -.-> FOUNDRY
 ```
 
 ### The three agents
@@ -103,7 +118,7 @@ flowchart TB
 |------------------------------|----------------------------------------------------------------|----------------------------------------------|---------------|
 | Claims Intake Agent          | Extracts claim details and retrieves related statement context | Mistral Document AI and Foundry IQ           | Challenge 2   |
 | Claims Intelligence Agent    | Retrieves policy data and evaluates coverage, consistency, and escalation | Foundry IQ policies knowledge base | Challenge 3   |
-| Claims Security Action Agent | Attempts downstream actions within deterministic trust limits  | FIDES integrity and confidentiality policies | Challenge 5   |
+| Claims Security Action Agent | Attempts downstream actions within deterministic trust limits  | FIDES integrity and confidentiality policies | Challenge 6   |
 
 ---
 
@@ -117,8 +132,12 @@ By participating in this microhack, you will learn how to:
 * Convert retrieved policy documents into typed data for coverage adjudication
 * Compose intake and intelligence agents into a sequential workflow with conditional
 	human review
+* Build the same workflow with Microsoft Agent Framework executors and edges, and deploy it
+	as a hosted Foundry agent
 * Apply FIDES integrity and confidentiality policies to sensitive tools
 * Test prompt-injection and private-data exfiltration defenses
+* Trace agent runs, score decisions with rubric and continuous evaluations, and measure
+	guardrails before and after you change them
 
 ---
 
@@ -132,8 +151,20 @@ To complete the microhack, you will need:
 * Azure CLI authenticated with the event account used for the lab
 * Azure resources and environment values supplied by the MicroHack platform or your
 	event coach
+* For Challenge 5: permission to connect Application Insights to the Foundry project and
+	to create guardrails (the challenge lists the exact roles)
+* For Challenge 6: the FIDES dependency versions and Foundry access described in the challenge
 
 ### Participant setup
+
+In these instructions, **workshop root** means
+[`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](./), the folder containing
+`pyproject.toml`, `azure.yaml`, `docs/`, and `agent-framework/`.
+It is not the top-level `MicroHack/` Git checkout. Run workshop setup commands here:
+
+```bash
+cd "<path-to-MicroHack>/03-Azure/01-04-AI/05_Claims_Processing"
+```
 
 Complete all environment preparation in
 [Challenge 1: Prepare the Environment](./challenges/challenge-01.md). It covers the
@@ -145,21 +176,25 @@ and validation required before beginning the build challenges.
 ## Repository structure
 
 ```text
-claims-microhack/
-|-- challenges/                 # Challenge instructions (challenge-01 through challenge-05)
+MicroHack/03-Azure/01-04-AI/05_Claims_Processing/
+|-- agent-framework/            # Default Challenge 4 workflow and hosted-agent container
+|-- challenges/                 # Challenge instructions (challenge-01 through challenge-06)
 |-- data/
 |   |-- claims/                 # Raw and derived sample claim evidence
+|   |-- evaluation/             # Labeled test set and rubric for Challenge 5
 |   `-- policies/               # Sample insurance policy documents
-|-- docs/                       # Python agents, workflows, and Function project
+|-- docs/                       # Python agents, workflows, and evaluation scripts
 |-- labautomation/              # MicroHack provisioning and Azure deployment template
 |-- walkthrough/                # Reference solutions for each challenge
+|-- azure.yaml                  # Hosted agent definition for azd and the Foundry Toolkit
 |-- pyproject.toml              # Pinned participant environment
 `-- README.md
 ```
 
 | Path                                   | Who uses it                | Purpose                                                     |
 |----------------------------------------|----------------------------|-------------------------------------------------------------|
-| [`challenges/`](./challenges/)         | Attendees                  | Step-by-step instructions for the five challenges           |
+| [`challenges/`](./challenges/)         | Attendees                  | Step-by-step instructions for the six challenges            |
+| [`agent-framework/`](./agent-framework/) | Attendees                | Default Challenge 4 Agent Framework workflow and container |
 | [`data/`](./data/)                     | Attendees and scripts      | Accident evidence and policy documents used by the workflow |
 | [`docs/`](./docs/)                     | Attendees                  | Supplied Python agents and orchestration code               |
 | [`labautomation/`](./labautomation/)   | Platform and coaches       | Per-lab provisioning and Azure Resource Manager deployment  |
@@ -169,7 +204,7 @@ claims-microhack/
 
 ## Challenges
 
-The microhack contains one preparation challenge and four core build challenges. Each
+The microhack contains one preparation challenge and five core build challenges. Each
 build stage extends the same end-to-end claims workflow.
 
 ### Challenge structure
@@ -187,25 +222,33 @@ Each challenge follows a consistent learning path:
 
 ### Challenge list
 
+Joining directly at Challenge 4? Follow the
+[direct-start prerequisites and local setup](./challenges/challenge-04-agent-framework.md#starting-directly-at-challenge-4)
+to restore what Challenges 1-3 would have prepared.
+
 | # | Challenge | Description | Duration |
 |---|-----------|-------------|----------|
 | 1 | [Prepare the Environment](./challenges/challenge-01.md) | Verify access to the provisioned Azure resources and development environment used throughout the microhack | 30 min |
 | 2 | [Build the Claims Intake Agent](./challenges/challenge-02.md) | Process accident statements with Mistral Document AI and ground the structured intake in Foundry IQ evidence | 45 min |
 | 3 | [Build the Claims Intelligence Agent](./challenges/challenge-03.md) | Ground one intelligence agent in a Foundry IQ policy knowledge base and produce an auditable coverage decision | 30 min |
-| 4 | [Orchestrate the Two-Agent Claims Workflow](./challenges/challenge-04.md) | Compose intake and intelligence agents with a conditional human-review branch | 45 min |
-| 5 | [Harden the Claims Pipeline Against Prompt Injection](./challenges/challenge-05.md) | Apply FIDES controls to block unauthorized payout and private-data exfiltration attempts | 60 min |
+| 4 | [Build the Claims Workflow with Agent Framework](./challenges/challenge-04-agent-framework.md) | Default path: compose intake and intelligence agents as a graph with conditional human review and optional hosted-agent deployment. The [manual sequential workflow](./challenges/challenge-04.md) remains an alternative | 45 min |
+| 5 | [Observe, Evaluate, and Guard the Claims Workflow](./challenges/challenge-05.md) | Trace agent calls, score decisions with rubric and continuous evaluations, and measure a guardrail | 90 min |
+| 6 | [Harden the Claims Pipeline Against Prompt Injection](./challenges/challenge-06.md) | Apply FIDES controls to block unauthorized payout and private-data exfiltration attempts | 60 min |
 
 > [!TIP]
 > Pause after each challenge to consider where the same patterns apply in your own
 > business processes. Grounded retrieval, specialized agent orchestration, explicit
-> human review, and deterministic tool controls extend beyond insurance claims.
+> human review, deterministic tool controls, and continuous evaluation extend beyond
+> insurance claims.
 
 ### Solution walkthroughs
 
 * [Challenge 2 solution](./walkthrough/challenge-02/solution-02.md)
 * [Challenge 3 solution](./walkthrough/challenge-03/solution-03.md)
-* [Challenge 4 solution](./walkthrough/challenge-04/solution-04.md)
+* [Challenge 4 solution (Agent Framework, default)](./walkthrough/challenge-04/solution-04-agent-framework.md)
+* [Challenge 4 solution (manual sequential alternative)](./walkthrough/challenge-04/solution-04.md)
 * [Challenge 5 solution](./walkthrough/challenge-05/solution-05.md)
+* [Challenge 6 solution](./walkthrough/challenge-06/solution-06.md)
 
 ---
 

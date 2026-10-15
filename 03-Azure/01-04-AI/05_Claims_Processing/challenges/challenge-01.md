@@ -66,10 +66,20 @@ Open a terminal in the Codespace (Terminal > New Terminal) and run the following
 az --version
 ```
 
+Change to the **workshop folder**
+[`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](../), not the top-level
+`MicroHack/` Git checkout:
+
+```bash
+cd "<path-to-MicroHack>/03-Azure/01-04-AI/05_Claims_Processing"
+```
+
+Replace `<path-to-MicroHack>` with the location of your cloned `MicroHack` repository.
+If the terminal is already in `05_Claims_Processing/`, stay there.
 Install the pinned project dependencies and activate the Python environment:
 
 ```bash
-uv sync --frozen
+uv sync --refresh --python 3.11 --default-index https://pypi.org/simple
 source .venv/bin/activate
 ```
 
@@ -79,7 +89,7 @@ Sign in to Azure from the Codespace terminal with the assigned lab account:
 az login --use-device-code
 ```
 
-From the repository root, run the setup script with the resource group name provided
+From the same workshop folder, run the setup script with the resource group name provided
 in your Hackbox:
 
 ```bash
@@ -87,7 +97,7 @@ bash labautomation/get-keys.sh --resource-group "<your-resource-group-name>"
 ```
 
 The script locates the latest successful Claims MicroHack deployment and creates a
-local `.env` file at the repository root. It retrieves the Foundry project endpoint,
+local `.env` file in `05_Claims_Processing/`. It retrieves the Foundry project endpoint,
 Mistral Document AI key and endpoint, Azure AI Search key and endpoint, and Storage
 connection string required by Challenges 2 through 6. The file is excluded from Git,
 written with permissions `600`, and its secret values are not displayed.
@@ -96,7 +106,8 @@ written with permissions `600`, and its secret values are not displayed.
 
 Before continuing, confirm that the lab deployment uploaded the claim and policy files.
 Find the Storage account name in the output from `get-keys.sh`, then run these commands
-from the repository root:
+from the workshop folder
+[`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](../):
 
 ```bash
 STORAGE_ACCOUNT="<storage-account-name>"

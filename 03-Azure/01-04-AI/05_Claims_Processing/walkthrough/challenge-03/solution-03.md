@@ -3,13 +3,17 @@ title: "Solution 03: Build the Claims Intelligence Agent"
 description: "Solution walkthrough for grounding claim decisions in policy documents"
 ---
 
-[Home](../../README.md) | [Challenge 03](../../challenges/challenge-03.md) | [Previous solution](../challenge-02/solution-02.md) | [Next solution](../challenge-04/solution-04.md)
+[Home](../../README.md) | [Challenge 03](../../challenges/challenge-03.md) | [Previous solution](../challenge-02/solution-02.md) | [Next solution](../challenge-04/solution-04-agent-framework.md)
 
 ## Outcome
 
 This solution creates a Foundry IQ knowledge base over the five policy documents in
 Blob Storage, connects it to `claims-intelligence-agent`, and produces a grounded
 coverage decision for the Challenge 02 intake artifact.
+
+The knowledge base uses Minimal retrieval reasoning with Extractive data output so
+it does not require a separate knowledge-base model deployment. The agent's Foundry
+model performs the coverage reasoning.
 
 ## Prerequisites
 
@@ -21,8 +25,9 @@ coverage decision for the Challenge 02 intake artifact.
 
 ## Run the solution
 
-From the repository root, create the policy knowledge base, create the Foundry agent,
-and verify the policies:
+From the workshop folder,
+[`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](../../), create the policy knowledge
+base, create the Foundry agent, and verify the policies:
 
 ```bash
 cd docs
@@ -58,6 +63,9 @@ path and applies its deductible.
 * If storage configuration is missing, restore the deployment-provided
   connection string in the environment
 * If a policy is unknown, use one of the codes printed by `--verify-policies`
+* If MCP verification reports an unsupported API version, confirm the
+  `FOUNDRY_IQ_MCP_API_VERSION` value and ensure both Foundry project connection
+  targets use the same version before rerunning `--setup-agent`
 
 ## Validation checklist
 
@@ -66,6 +74,10 @@ path and applies its deductible.
 * [ ] The default liability-only claim is denied for the expected exclusion
 * [ ] The audit trail includes policy retrieval and coverage validation
 * [ ] The consistency score is between 1 and 100
+* [ ] If the decision escalates, `coverage_decision.requires_escalation` and
+  `coverage_decision.escalation_reason` agree with the `ESCALATED` status and
+  `ESCALATION_REQUIRED` warning
 
-Continue with [Challenge 04](../../challenges/challenge-04.md) and its
-[solution](../challenge-04/solution-04.md).
+Continue with [Challenge 04: Agent Framework workflow (default path)](../../challenges/challenge-04-agent-framework.md)
+and its [solution](../challenge-04/solution-04-agent-framework.md).
+The [manual sequential workflow](../../challenges/challenge-04.md) is an alternative.

@@ -29,6 +29,10 @@ load_dotenv(REPO_ROOT / ".env")
 
 FOUNDRY_AGENT_NAME = "claims-intake-agent"
 FOUNDRY_AGENT_INSTRUCTIONS = (
+    "When the input starts with INDEXED_STATEMENT_TASK, call azure_ai_search exactly once "
+    "using only the supplied source filename as a quoted phrase query. Do not add generic "
+    "words, claimant details, dates, or locations to this query. Summarize only the exact "
+    "matching statement. For other inputs, follow the OCR intake instructions below. "
     "You are the Claims Intake Agent. Before answering, you MUST call the azure_ai_search "
     "tool exactly once to search the crash statements index using key identifying details "
     "from the OCR text (claimant name, date, location). Always perform this search first, "
@@ -179,12 +183,15 @@ def _build_foundry_iq_tool(client: AIProjectClient, index_name: str) -> AzureAIS
 
 
 def _ensure_foundry_agent(client: AIProjectClient, model_deployment: str, index_name: str) -> None:
-    """Register the Claims Intake Agent or update it when its model changes."""
+    """Register the Claims Intake Agent or update it when its model or instructions change."""
     try:
         client.agents.get(FOUNDRY_AGENT_NAME)
         versions = list(client.agents.list_versions(FOUNDRY_AGENT_NAME))
         latest_version = max(versions, key=lambda version: int(version.version))
-        if latest_version.definition.model == model_deployment:
+        if (
+            latest_version.definition.model == model_deployment
+            and latest_version.definition.instructions == FOUNDRY_AGENT_INSTRUCTIONS
+        ):
             return
     except ResourceNotFoundError:
         pass
@@ -280,8 +287,8 @@ def run_indexed_claim_intake(claim_reference: str) -> dict[str, Any]:
     response = client.get_openai_client(agent_name=FOUNDRY_AGENT_NAME).responses.create(
         model=model_deployment,
         input=(
-            "Retrieve the already indexed crash statement whose source file is exactly "
-            f"{source_file}. Summarize the matching statement."
+            "INDEXED_STATEMENT_TASK\nSearch for the exact quoted source filename "
+            f'"{source_file}" without adding other terms. Summarize the matching statement.'
         ),
     )
     foundry_iq = _extract_foundry_iq_matches(response, index_name)

@@ -8,19 +8,23 @@ description: "Solution walkthrough for indexing claim statements and running the
 ## Outcome
 
 This solution indexes the ten supplied claim statement images, creates the
-`crash-statements-kb` knowledge base, and runs the Claims Intake Agent against a
-sample statement.
+`crash-statements-kb` knowledge base for portal exploration, and runs the Claims
+Intake Agent against a sample statement. The supplied agent queries the
+`crash-statements` index directly with its Azure AI Search tool; it does not use the
+knowledge base's MCP endpoint.
 
 ## Prerequisites
 
 * Receive a provisioned lab and its credentials from the MicroHack platform or coach
-* Run `uv sync` from the repository root
-* Copy `.env.example` to the repository-root `.env` and add the supplied values
+* Run `uv sync` from the workshop folder,
+  [`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](../../)
+* Copy `.env.example` to `.env` in that same workshop folder and add the supplied values
 * Authenticate to Azure for `DefaultAzureCredential`
 
 ## Run the solution
 
-From the repository root, populate the search index:
+From the workshop folder,
+[`MicroHack/03-Azure/01-04-AI/05_Claims_Processing/`](../../), populate the search index:
 
 ```bash
 cd docs
@@ -50,7 +54,7 @@ python claims-intake-agent.py ../data/claims/crash1/raw/statements/crash1_front.
 ## Expected result
 
 The index count is `10`. The generated intake artifact reports `status:
-success` and contains OCR text, extracted claim data, Foundry IQ search results,
+success` and contains OCR text, extracted claim data, Azure AI Search results,
 and an agent summary. At least one result should reference
 `crash1_front.jpeg`.
 
@@ -68,6 +72,7 @@ and an agent summary. At least one result should reference
 * [ ] The search index contains ten documents
 * [ ] The `crash-statements-kb` knowledge base exists
 * [ ] The `claims-intake-agent` appears in the Foundry project
+* [ ] The agent has an Azure AI Search tool configured for the `crash-statements` index
 * [ ] The intake artifact contains OCR, extracted data, search results, and an agent summary
 * [ ] At least one matching statement is returned
 

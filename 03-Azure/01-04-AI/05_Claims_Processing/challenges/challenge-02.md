@@ -10,9 +10,9 @@ In this challenge, you will build the first production-facing agent in the workf
 The Claims Intake Agent must do two things in one flow:
 
 1. Process a claim image using the `mistral-document-ai-2512` deployment.
-2. Query Foundry IQ (backed by your crash statements index) to retrieve related statement evidence.
+2. Query the `crash-statements` Azure AI Search index to retrieve related statement evidence.
 
-You will first create the agent itself using the Microsoft Foundry SDK, then give it its enterprise need — Foundry IQ grounding — by attaching an MCP tool that points at the knowledge base you create in Task 2. At the end of this challenge, you will have a single JSON intake artifact that combines OCR output plus retrieved crash statement context.
+You will OCR the statement images, create a Foundry IQ knowledge base to explore retrieval in the portal, and create the agent using the Microsoft Foundry SDK. In the supplied implementation, the agent uses a native Azure AI Search tool to query the `crash-statements` index directly; it does not call the knowledge base's MCP endpoint. At the end of this challenge, you will have a single JSON intake artifact that combines OCR output and retrieved crash statement context.
 
 ### Foundry IQ: From search indexes to knowledge bases
 
@@ -34,7 +34,7 @@ In essence, Azure AI Search remains the underlying retrieval engine, while Found
 
 ### Task 1: Populate the crash statements search index
 
-The Claims Intake Agent's Foundry IQ tool queries an Azure AI Search index named `crash-statements`. [`labautomation/azuredeploy.json`](../labautomation/azuredeploy.json) already creates this index for you as part of the lab deployment, so you only need to load it with crash statement content before running the agent.
+The Claims Intake Agent's Azure AI Search tool queries an index named `crash-statements`. [`labautomation/azuredeploy.json`](../labautomation/azuredeploy.json) already creates this index for you as part of the lab deployment, so you only need to load it with crash statement content before running the agent.
 
 #### The index schema
 
@@ -55,7 +55,7 @@ The `crash-statements` index is created with this schema:
 
 #### Upload crash statement documents
 
-Every claim's statement images under [`data/claims/`](../data/claims/) needs to be OCR'd and uploaded as a document so Foundry IQ has evidence for all five crashes, not just one. Run [`docs/index_crash_statements.py`](../docs/index_crash_statements.py) to do this for the whole folder in one pass:
+Every claim's statement images under [`data/claims/`](../data/claims/) need to be OCR'd and uploaded as documents so the index contains evidence for all five crashes, not just one. Run [`docs/index_crash_statements.py`](../docs/index_crash_statements.py) to do this for the whole folder in one pass:
 
 ```bash
 cd docs
@@ -85,9 +85,9 @@ You should get the answer of `Done. Indexed 10 statement documents`.
 A raw Azure AI Search index is just a searchable document store. Querying it well — writing filters, choosing a query type, ranking results — is work your application (or the agent) has to do itself every time. Foundry IQ takes a different approach: it puts a managed retrieval layer on top of one or more indexes, so the agent can ask a question in natural language and let Azure AI Search plan and execute the query for it. That managed layer is built from two objects:
 
 - **Knowledge source** — a reusable reference to a data source. In this challenge its kind is `searchIndex`, meaning it wraps the `crash-statements` index you just populated: which fields are searchable, which are returned in results, and which semantic configuration to rank with. A knowledge source doesn't hold data itself; it just describes how to read from something that does.
-- **Knowledge base** — the object your agent actually talks to. It references one or more knowledge sources (here, just the one) and exposes a single retrieval endpoint — including an MCP (Model Context Protocol) endpoint — that a Foundry agent can call as a tool. The knowledge base is what turns "search this index" into "ask this knowledge base a question."
+- **Knowledge base** — the managed retrieval object you can explore in the Azure AI Search portal. It references one or more knowledge sources and exposes a retrieval endpoint, including MCP. This challenge creates the knowledge base so you can compare its managed retrieval experience with the direct-index tool used in the supplied agent.
 
-In short: **index → knowledge source (wraps the index) → knowledge base (orchestrates retrieval, exposes MCP) → agent tool**. The index still holds your crash statement content; the knowledge base is the new grounding surface the agent will call in Task 4, replacing direct index queries with an MCP-based retrieval tool.
+In short, the portal exercise follows **index → knowledge source → knowledge base → portal retrieval**. The supplied agent follows **index → native Azure AI Search tool → agent**. The knowledge base does not replace the index and is not attached to this agent by the supplied code.
 
 ### Create the knowledge source and knowledge base
 
@@ -105,8 +105,13 @@ This script does three things against the `crash-statements` index:
 3. **Creates a `KnowledgeBase`** named `crash-statements-kb` that references that knowledge source, and prints its MCP endpoint:
 
    ```text
-   https://<your-search-service>.search.windows.net/knowledgebases/crash-statements-kb/mcp?api-version=2026-04-01
+   https://<your-search-service>.search.windows.net/knowledgebases/crash-statements-kb/mcp?api-version=2026-08-01-preview
    ```
+
+   The helper uses `FOUNDRY_IQ_MCP_API_VERSION` when set; otherwise it uses
+   `2026-08-01-preview` for this lab's verified Search service. An API-version error
+   means the Search service does not support the configured version; check its supported
+   versions before overriding the variable.
 
 ### Verify the knowledge base retrieves crash statements
 
@@ -199,33 +204,39 @@ Key points:
 
 At this point the agent can already summarize OCR text using the model alone — it has no grounding in your crash statement evidence yet. That's the enterprise need you'll add next.
 
-### Task 4: Understand how Foundry IQ grounding is added through a knowledge base (no action required)
+### Task 4: Understand how the supplied agent queries Azure AI Search directly (no action required)
 
-A generic model has no way to know about your organization's crash statement evidence. This section walks through how the agent is connected to Foundry IQ through the knowledge base you created in Task 2, so its answers are grounded in the index you populated in Task 1.
+A generic model has no way to know about your organization's crash statement evidence. The supplied agent grounds its answers by attaching the Foundry project's Azure AI Search connection and querying the `crash-statements` index populated in Task 1. This code path does not call the `crash-statements-kb` MCP endpoint created in Task 2.
 
 ```python
-def _build_foundry_iq_tool(client: AIProjectClient, knowledge_base_name: str) -> MCPTool:
-  return MCPTool(
-    server_label="knowledge-base",
-    server_url=f"{search_endpoint}/knowledgebases/{knowledge_base_name}/mcp?api-version=2026-04-01",
-    require_approval="never",
-    allowed_tools=["knowledge_base_retrieve"],
-    project_connection_id=project_connection_name,
-  )
+def _build_foundry_iq_tool(client: AIProjectClient, index_name: str) -> AzureAISearchTool:
+    connection_id = _get_ai_search_connection_id(client)
+    return AzureAISearchTool(
+        azure_ai_search=AzureAISearchToolResource(
+            indexes=[
+                AISearchIndexResource(
+                    project_connection_id=connection_id,
+                    index_name=index_name,
+                    query_type="simple",
+                    top_k=3,
+                )
+            ]
+        )
+    )
 ```
 
 Key points:
 
-- The knowledge base exposes an MCP endpoint, and the agent connects to that endpoint through an `MCPTool` instead of querying the search index directly.
-- `project_connection_id` points to the Foundry project connection that knows how to reach the knowledge base.
-- `allowed_tools=["knowledge_base_retrieve"]` keeps the agent focused on retrieval only.
-- The agent's instructions should still tell the model to use the knowledge-base tool before answering, because tool use by an LLM is discretionary by default.
+- `_get_ai_search_connection_id` finds the Azure AI Search connection attached to the Foundry project.
+- `AISearchIndexResource` identifies the existing `crash-statements` index through that connection.
+- `query_type="simple"` and `top_k=3` configure direct index search; there is no `MCPTool` or knowledge-base endpoint in this path.
+- The agent's instructions ask it to use the search tool to ground its statement summary; model tool selection remains part of the agent interaction.
 
-With the tool attached, the agent now retrieves real crash statement evidence from the knowledge base before summarizing each new OCR result — this is the enterprise capability that turns a generic summarizer into a grounded Claims Intake Agent.
+The separate knowledge base from Task 2 is useful for learning and testing Foundry IQ's managed retrieval in the Azure AI Search portal. Do not infer that the agent used the knowledge base just because the portal retrieval returns the same statement.
 
 ### Task 5: Run the Claims Intake Agent
 
-Use an accident statement form image under `data/claims/{claim-id}/raw/statements/`, not the reference photos in `data/claims/{claim-id}/raw/vehicle-damage/`. The `raw/vehicle-damage/*.jpg` files are generic damage photos with no text, so OCR on them produces no usable content and Foundry IQ returns zero matches. The `raw/statements/*_front.jpeg` and `*_back.jpeg` files contain the actual handwritten claim forms that match the indexed crash statement content.
+Use an accident statement form image under `data/claims/{claim-id}/raw/statements/`, not the reference photos in `data/claims/{claim-id}/raw/vehicle-damage/`. The `raw/vehicle-damage/*.jpg` files are generic damage photos with no text, so OCR on them produces no usable content and the search tool returns zero matches. The `raw/statements/*_front.jpeg` and `*_back.jpeg` files contain the actual handwritten claim forms that match the indexed crash statement content.
 
 ```bash
 cd docs
@@ -248,7 +259,7 @@ python claims-intake-agent.py ../data/claims/crash1/raw/statements/crash1_front.
 
   * **Model** selects the deployed model that runs the agent.
   * **Instructions** define the agent's role, behavior, and response rules.
-  * **Tools** connect capabilities such as Foundry IQ, MCP, or custom functions.
+  * **Tools** connect capabilities such as Azure AI Search, MCP, or custom functions. This agent's tool queries the `crash-statements` index directly.
   * **Parameters** tune response behavior, including creativity and reasoning effort when supported by the model.
   * **Versions** preserve published configurations so changes can be tracked or rolled back.
 
@@ -259,8 +270,9 @@ python claims-intake-agent.py ../data/claims/crash1/raw/statements/crash1_front.
   vehicle, incident location, and whether the retrieved evidence is consistent.
   ```
 
-  Confirm that the response identifies John Peterson and uses the knowledge-base
-  tool before answering.
+  Confirm that the response identifies John Peterson and is grounded in the indexed
+  statement evidence. This portal playground test does not change the direct-index
+  implementation described in Task 4.
 
 ### Task 7: Optional, connect Foundry to the blob storage account
 
@@ -292,7 +304,7 @@ With this connection in place, Foundry can list and read blobs from the `claims-
 
 - OCR call succeeds with `status: success`.
 - The `claims-intake-agent` agent appears under your Foundry project's agents (visible via the SDK or the Foundry portal).
-- At least one crash statement match is returned from Foundry IQ.
+- At least one crash statement match is returned from the Azure AI Search tool.
 - Output JSON is created and contains `ocr`, `foundry_iq`, and `agent_summary` sections.
 - (Optional) The Storage account connection appears under **Connected resources** in the Foundry portal with a status of **Connected**.
 
@@ -300,4 +312,3 @@ With this connection in place, Foundry can list and read blobs from the `claims-
 
 Continue with [Challenge 3](./challenge-03.md) to ground coverage decisions in
 enterprise policy documents.
-

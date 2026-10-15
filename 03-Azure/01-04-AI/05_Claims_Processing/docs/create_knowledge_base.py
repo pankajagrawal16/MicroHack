@@ -39,6 +39,7 @@ load_dotenv(REPO_ROOT / ".env")
 SEMANTIC_CONFIG_NAME = "crash-statements-semantic-config"
 POLICIES_KNOWLEDGE_SOURCE_NAME = "policies-blob-ks"
 POLICIES_KNOWLEDGE_BASE_NAME = "policies-kb"
+MCP_API_VERSION = os.getenv("FOUNDRY_IQ_MCP_API_VERSION", "2026-08-01-preview")
 
 
 def _client_and_endpoint() -> tuple[SearchIndexClient, str]:
@@ -46,7 +47,11 @@ def _client_and_endpoint() -> tuple[SearchIndexClient, str]:
     key = os.getenv("FOUNDRY_IQ_SEARCH_KEY") or os.getenv("SEARCH_ADMIN_KEY", "")
     if not endpoint or not key:
         raise RuntimeError("Missing FOUNDRY_IQ_SEARCH_ENDPOINT/FOUNDRY_IQ_SEARCH_KEY in .env")
-    return SearchIndexClient(endpoint=endpoint, credential=AzureKeyCredential(key)), endpoint
+    return SearchIndexClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(key),
+        api_version=MCP_API_VERSION,
+    ), endpoint
 
 
 def ensure_index_ready_for_agentic_retrieval(client: SearchIndexClient, index_name: str) -> None:
@@ -122,9 +127,11 @@ def ensure_knowledge_base(
         description=description,
         knowledge_sources=[KnowledgeSourceReference(name=knowledge_source_name)],
     )
+    knowledge_base["outputMode"] = "extractiveData"
+    knowledge_base["retrievalReasoningEffort"] = {"kind": "minimal"}
     client.create_or_update_knowledge_base(knowledge_base=knowledge_base)
     print(f"Knowledge base '{knowledge_base_name}' created or updated.")
-    return f"{search_endpoint.rstrip('/')}/knowledgebases/{knowledge_base_name}/mcp?api-version=2026-04-01"
+    return f"{search_endpoint.rstrip('/')}/knowledgebases/{knowledge_base_name}/mcp?api-version={MCP_API_VERSION}"
 
 
 def ensure_policies_knowledge_source(

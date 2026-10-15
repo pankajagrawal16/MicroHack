@@ -40,6 +40,9 @@ wheels/
 .env.local
 local.settings.json
 
+# Foundry Toolkit deployment selection (specific to each participant)
+.foundry/.deployment.json
+
 # Node
 node_modules/
 package-lock.json
